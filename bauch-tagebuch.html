@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v4</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v5</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -144,7 +144,10 @@ const $=id=>document.getElementById(id);
 const views=['viewSettings','viewNew','viewSym','viewAnalyse'];
 function show(v){views.forEach(x=>$(x).classList.toggle('hidden',x!==v));window.scrollTo(0,0)}
 function load(){try{return JSON.parse(localStorage.getItem(LS)||'[]')}catch(e){return[]}}
-function save(){localStorage.setItem(LS,JSON.stringify(entries));render()}
+const LSB='bauchtagebuch.lastbackup';
+function exportJson(auto){const b=new Blob([JSON.stringify(entries,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`bauch-tagebuch-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();a.remove();localStorage.setItem(LSB,Date.now());if(auto){const t=document.createElement('div');t.textContent='Sicherung in Downloads gespeichert';t.style.cssText='position:fixed;top:60px;left:16px;right:16px;background:var(--acc);color:#fff;padding:10px;border-radius:10px;text-align:center;z-index:9';document.body.appendChild(t);setTimeout(()=>t.remove(),2500)}}
+function save(){localStorage.setItem(LS,JSON.stringify(entries));render();const lb=+localStorage.getItem(LSB)||0;if(entries.length>=3&&Date.now()-lb>7*864e5)try{exportJson(true)}catch(e){}}
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 function fmtLocal(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`}
 function fmtTime(iso){return new Date(iso).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}
 function fmtDay(iso){return new Date(iso).toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})}
@@ -155,8 +158,8 @@ $('apiKey').value=localStorage.getItem(LSK)||'';
 $('model').value=localStorage.getItem(LSM)||'claude-haiku-4-5-20251001';
 $('btnSettings').onclick=()=>{updateStats();show('viewSettings')};
 $('saveSettings').onclick=()=>{localStorage.setItem(LSK,$('apiKey').value.trim());localStorage.setItem(LSM,$('model').value);show(null);alert('Gespeichert')};
-function updateStats(){const m=entries.filter(e=>e.typ==='mahlzeit').length,s=entries.length-m;$('stats').textContent=`${m} Mahlzeiten, ${s} Symptom-Einträge, ca. ${Math.round(JSON.stringify(entries).length/1024)} kB gespeichert`}
-$('btnExport').onclick=()=>{const b=new Blob([JSON.stringify(entries,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`bauch-tagebuch-${new Date().toISOString().slice(0,10)}.json`;a.click()};
+function updateStats(){const m=entries.filter(e=>e.typ==='mahlzeit').length,s=entries.length-m;const lb=+localStorage.getItem(LSB);$('stats').textContent=`${m} Mahlzeiten, ${s} Symptom-Einträge, ca. ${Math.round(JSON.stringify(entries).length/1024)} kB gespeichert. Letzte Sicherung: ${lb?new Date(lb).toLocaleDateString('de-DE'):'noch keine'} (automatisch alle 7 Tage beim Speichern)`}
+$('btnExport').onclick=()=>exportJson(false);
 $('btnImport').onclick=()=>$('importFile').click();
 $('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{const arr=JSON.parse(t);if(!Array.isArray(arr))throw 0;const ids=new Set(entries.map(x=>x.id));let n=0;arr.forEach(x=>{if(!ids.has(x.id)){entries.push(x);n++}});save();alert(n+' Einträge importiert')}).catch(()=>alert('Datei nicht lesbar'));e.target.value=''};
 
