@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2f6b4f">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Bauch-Tagebuch</title>
+<style>
+:root{--bg:#f6f5f1;--fg:#1d1d1b;--mut:#6b6b66;--card:#fff;--line:#e2e0d9;--acc:#2f6b4f;--acc2:#e9f2ee;--warn:#b5471f;--warn2:#fbeee8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:90px}
+header{position:sticky;top:0;background:var(--acc);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;z-index:5}
+header h1{margin:0;font-size:18px;font-weight:600}
+header button{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:8px;padding:6px 10px;font-size:14px}
+main{padding:12px 16px;max-width:640px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+button.btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:12px;font-size:16px;font-weight:600;width:100%}
+button.btn.sec{background:var(--acc2);color:var(--acc)}
+button.btn.warn{background:var(--warn2);color:var(--warn)}
+button.btn:disabled{opacity:.5}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:16px;background:#fff}
+textarea{min-height:60px}
+label{font-size:13px;color:var(--mut);display:block;margin:8px 0 4px}
+.day{font-size:13px;color:var(--mut);margin:14px 0 6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.entry{display:flex;gap:10px}
+.entry img{width:64px;height:64px;object-fit:cover;border-radius:8px;flex:none}
+.entry .t{font-size:13px;color:var(--mut)}
+.entry .body{flex:1;min-width:0}
+.entry .comp{font-size:14px}
+.sym{border-left:4px solid var(--warn)}
+.pill{display:inline-block;background:var(--acc2);color:var(--acc);border-radius:999px;padding:2px 8px;font-size:12px;margin:2px 2px 0 0}
+.pill.b{background:var(--warn2);color:var(--warn)}
+.mut{color:var(--mut);font-size:13px}
+.hidden{display:none}
+.fab{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:5}
+.fab button{flex:1}
+.scale{display:flex;gap:4px}
+.scale button{flex:1;padding:10px 0;border:1px solid var(--line);background:#fff;border-radius:8px;font-size:15px}
+.scale button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.scale.b button.on{background:var(--warn);border-color:var(--warn)}
+pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:s .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes s{to{transform:rotate(360deg)}}
+.del{background:none;border:0;color:var(--mut);font-size:13px;padding:4px 0}
+</style>
+</head>
+<body>
+<header><h1>Bauch-Tagebuch</h1><button id="btnSettings">⚙︎</button></header>
+<main>
+
+<section id="viewSettings" class="card hidden">
+  <label>Anthropic API-Key (bleibt nur auf diesem Handy)</label>
+  <input id="apiKey" type="password" placeholder="sk-ant-…">
+  <label>Modell für Fotos</label>
+  <select id="model">
+    <option value="claude-haiku-4-5-20251001">claude-haiku-4-5 (günstig)</option>
+    <option value="claude-sonnet-5">claude-sonnet-5 (genau)</option>
+  </select>
+  <div style="margin-top:10px" class="row">
+    <button class="btn" id="saveSettings">Speichern</button>
+  </div>
+  <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+  <div class="row">
+    <button class="btn sec" id="btnExport">Export JSON</button>
+    <button class="btn sec" id="btnImport">Import JSON</button>
+  </div>
+  <input id="importFile" type="file" accept="application/json" class="hidden">
+  <p class="mut" id="stats"></p>
+</section>
+
+<section id="viewNew" class="card hidden">
+  <div class="row">
+    <button class="btn" id="pickGallery">📷 Foto aus Galerie</button>
+    <button class="btn sec" id="pickCamera">Kamera</button>
+  </div>
+  <input id="fileGallery" type="file" accept="image/*" class="hidden">
+  <input id="fileCamera" type="file" accept="image/*" capture="environment" class="hidden">
+  <div id="preview" class="hidden" style="margin-top:10px">
+    <img id="previewImg" style="width:100%;border-radius:10px">
+    <label>Zeitpunkt</label>
+    <input id="mealTime" type="datetime-local">
+    <label>Ergänzung (optional, z. B. „großer Filterkaffee mit Milch")</label>
+    <input id="mealHint" type="text">
+    <div style="margin-top:10px"><button class="btn" id="analyze">Auslesen und speichern</button></div>
+    <div id="result" class="card hidden" style="margin-top:10px"></div>
+  </div>
+</section>
+
+<section id="viewSym" class="card hidden">
+  <label>Zeitpunkt</label>
+  <input id="symTime" type="datetime-local">
+  <label>Stuhl (Bristol 1 = hart … 7 = flüssig, 0 = kein Stuhlgang)</label>
+  <div class="scale b" id="bristol"></div>
+  <label>Bauchschmerz (0 = keine … 3 = stark)</label>
+  <div class="scale b" id="pain"></div>
+  <label>Notiz</label>
+  <textarea id="symNote" placeholder="z. B. Krämpfe nach dem Frühstück, Blähungen …"></textarea>
+  <div style="margin-top:10px"><button class="btn" id="saveSym">Speichern</button></div>
+</section>
+
+<section id="viewAnalyse" class="card hidden">
+  <p class="mut">Schickt alle Einträge (ohne Bilder) an die API und sucht nach Komponenten, die an Durchfall-Tagen 2–12 h vorher gehäuft auftreten. Sinnvoll ab ca. 3 Wochen Daten.</p>
+  <label>Modell</label>
+  <select id="modelAnalyse">
+    <option value="claude-sonnet-5">claude-sonnet-5 (empfohlen)</option>
+    <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+  </select>
+  <div style="margin-top:10px"><button class="btn" id="runAnalyse">Auswerten</button></div>
+  <div id="analyseOut" class="card hidden" style="margin-top:10px"><pre id="analyseText"></pre></div>
+</section>
+
+<section id="viewList"></section>
+</main>
+
+<div class="fab">
+  <button class="btn" id="tabNew">+ Mahlzeit</button>
+  <button class="btn warn" id="tabSym">+ Symptom</button>
+  <button class="btn sec" id="tabAnalyse">Auswertung</button>
+</div>
+
+<script>
+const LS='bauchtagebuch.v1', LSK='bauchtagebuch.key', LSM='bauchtagebuch.model';
+let entries=load();
+const $=id=>document.getElementById(id);
+const views=['viewSettings','viewNew','viewSym','viewAnalyse'];
+function show(v){views.forEach(x=>$(x).classList.toggle('hidden',x!==v));window.scrollTo(0,0)}
+function load(){try{return JSON.parse(localStorage.getItem(LS)||'[]')}catch(e){return[]}}
+function save(){localStorage.setItem(LS,JSON.stringify(entries));render()}
+function fmtLocal(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`}
+function fmtTime(iso){return new Date(iso).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}
+function fmtDay(iso){return new Date(iso).toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+
+// Settings
+$('apiKey').value=localStorage.getItem(LSK)||'';
+$('model').value=localStorage.getItem(LSM)||'claude-haiku-4-5-20251001';
+$('btnSettings').onclick=()=>{updateStats();show('viewSettings')};
+$('saveSettings').onclick=()=>{localStorage.setItem(LSK,$('apiKey').value.trim());localStorage.setItem(LSM,$('model').value);show(null);alert('Gespeichert')};
+function updateStats(){const m=entries.filter(e=>e.typ==='mahlzeit').length,s=entries.length-m;$('stats').textContent=`${m} Mahlzeiten, ${s} Symptom-Einträge, ca. ${Math.round(JSON.stringify(entries).length/1024)} kB gespeichert`}
+$('btnExport').onclick=()=>{const b=new Blob([JSON.stringify(entries,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`bauch-tagebuch-${new Date().toISOString().slice(0,10)}.json`;a.click()};
+$('btnImport').onclick=()=>$('importFile').click();
+$('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{const arr=JSON.parse(t);if(!Array.isArray(arr))throw 0;const ids=new Set(entries.map(x=>x.id));let n=0;arr.forEach(x=>{if(!ids.has(x.id)){entries.push(x);n++}});save();alert(n+' Einträge importiert')}).catch(()=>alert('Datei nicht lesbar'));e.target.value=''};
+
+// Tabs
+$('tabNew').onclick=()=>{resetNew();show('viewNew')};
+$('tabSym').onclick=()=>{$('symTime').value=fmtLocal(new Date());show('viewSym')};
+$('tabAnalyse').onclick=()=>show('viewAnalyse');
+
+// Symptom scales
+let bristol=0,pain=0;
+function buildScale(el,max,set){el.innerHTML='';for(let i=0;i<=max;i++){const b=document.createElement('button');b.textContent=i;b.onclick=()=>{set(i);[...el.children].forEach((c,j)=>c.classList.toggle('on',j===i))};el.appendChild(b)}el.children[0].classList.add('on')}
+buildScale($('bristol'),7,v=>bristol=v);
+buildScale($('pain'),3,v=>pain=v);
+$('saveSym').onclick=()=>{
+  const t=$('symTime').value;if(!t)return alert('Zeit fehlt');
+  entries.push({id:uid(),typ:'symptom',zeit:new Date(t).toISOString(),bristol,schmerz:pain,notiz:$('symNote').value.trim()});
+  save();$('symNote').value='';bristol=0;pain=0;buildScale($('bristol'),7,v=>bristol=v);buildScale($('pain'),3,v=>pain=v);show(null);
+};
+
+// Meal photo
+let currentImg=null,currentThumb=null;
+function resetNew(){currentImg=null;currentThumb=null;$('preview').classList.add('hidden');$('result').classList.add('hidden');$('mealHint').value='';$('fileGallery').value='';$('fileCamera').value=''}
+$('pickGallery').onclick=()=>$('fileGallery').click();
+$('pickCamera').onclick=()=>$('fileCamera').click();
+$('fileGallery').onchange=onFile;$('fileCamera').onchange=onFile;
+async function onFile(e){
+  const f=e.target.files[0];if(!f)return;
+  const buf=await f.arrayBuffer();
+  const exifDate=readExifDate(buf);
+  $('mealTime').value=fmtLocal(exifDate||new Date(f.lastModified||Date.now()));
+  const img=await loadImage(f);
+  currentImg=toJpeg(img,1280,0.85);
+  currentThumb=toJpeg(img,240,0.7);
+  $('previewImg').src='data:image/jpeg;base64,'+currentImg;
+  $('preview').classList.remove('hidden');
+}
+function loadImage(f){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(f)})}
+function toJpeg(img,max,q){const r=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*r);c.height=Math.round(img.height*r);c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',q).split(',')[1]}
+
+// Minimal EXIF: DateTimeOriginal (0x9003)
+function readExifDate(buf){
+  try{
+    const v=new DataView(buf);if(v.getUint16(0)!==0xFFD8)return null;
+    let off=2;
+    while(off<v.byteLength){
+      if(v.getUint8(off)!==0xFF)return null;
+      const marker=v.getUint8(off+1);const len=v.getUint16(off+2);
+      if(marker===0xE1 && v.getUint32(off+4)===0x45786966){ // "Exif"
+        const t=off+10;const le=v.getUint16(t)===0x4949;
+        const g16=p=>v.getUint16(p,le),g32=p=>v.getUint32(p,le);
+        const ifd0=t+g32(t+4);
+        let exifIfd=null;
+        const n=g16(ifd0);
+        for(let i=0;i<n;i++){const e=ifd0+2+i*12;if(g16(e)===0x8769){exifIfd=t+g32(e+8);break}}
+        if(!exifIfd)return null;
+        const m=g16(exifIfd);
+        for(let i=0;i<m;i++){const e=exifIfd+2+i*12;if(g16(e)===0x9003){const p=t+g32(e+8);let s='';for(let k=0;k<19;k++)s+=String.fromCharCode(v.getUint8(p+k));const d=new Date(s.replace(/^(\d{4}):(\d{2}):(\d{2}) /,'$1-$2-$3T'));return isNaN(d)?null:d}}
+        return null;
+      }
+      off+=2+len;
+    }
+  }catch(e){}
+  return null;
+}
+
+// API
+async function callApi(model,content,maxTokens){
+  const key=localStorage.getItem(LSK);if(!key)throw new Error('Kein API-Key – unter ⚙︎ eintragen');
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,messages:[{role:'user',content}]})});
+  if(!r.ok){const t=await r.text();throw new Error('API '+r.status+': '+t.slice(0,300))}
+  const j=await r.json();return j.content.map(c=>c.text||'').join('');
+}
+const MEAL_PROMPT=`Du analysierst ein Foto einer Mahlzeit für ein Verdauungs-Tagebuch. Ziel ist, später Auslöser für Durchfall zu finden. Erfasse deshalb möglichst konkrete Einzelkomponenten, nicht Gerichte. Achte besonders auf: Kaffeeart (Espresso/Filterkaffee/Cappuccino), Tassengröße, Milch ja/nein, Brotsorte (Toast/Vollkorn/Weißbrot), Aufstriche (Marmelade, Butter, Käse, Wurst), Rohkost, Obst, Süßstoffe, Alkohol, Getränkemengen. Schätze Mengen grob.
+Antworte NUR mit JSON in genau dieser Form:
+{"komponenten":[{"name":"Filterkaffee","menge":"große Tasse ca. 300 ml","kategorie":"Getränk"}],"kaffee":{"art":"Filterkaffee|Espresso|Cappuccino|kein","groesse":"klein|mittel|groß","milch":"ja|nein|unklar"},"unsicher":"kurz, was nicht erkennbar war"}`;
+$('analyze').onclick=async()=>{
+  if(!currentImg)return;
+  const btn=$('analyze');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Lese aus …';
+  try{
+    const hint=$('mealHint').value.trim();
+    const content=[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:currentImg}},{type:'text',text:MEAL_PROMPT+(hint?`\nZusatzinfo vom Nutzer: ${hint}`:'')}];
+    const txt=await callApi(localStorage.getItem(LSM)||'claude-haiku-4-5-20251001',content,800);
+    const m=txt.match(/\{[\s\S]*\}/);const j=JSON.parse(m?m[0]:txt);
+    const e={id:uid(),typ:'mahlzeit',zeit:new Date($('mealTime').value).toISOString(),komponenten:j.komponenten||[],kaffee:j.kaffee||null,unsicher:j.unsicher||'',hinweis:hint,thumb:currentThumb};
+    entries.push(e);save();
+    $('result').innerHTML='<b>Gespeichert:</b><br>'+e.komponenten.map(k=>`<span class="pill">${esc(k.name)} · ${esc(k.menge||'')}</span>`).join(' ')+(e.unsicher?`<p class="mut">Unsicher: ${esc(e.unsicher)}</p>`:'');
+    $('result').classList.remove('hidden');
+    setTimeout(()=>{resetNew();show(null)},1800);
+  }catch(err){alert(err.message)}
+  btn.disabled=false;btn.textContent='Auslesen und speichern';
+};
+
+// Analyse
+$('runAnalyse').onclick=async()=>{
+  const btn=$('runAnalyse');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Werte aus …';
+  try{
+    const data=entries.slice().sort((a,b)=>a.zeit.localeCompare(b.zeit)).map(e=>{const o={...e};delete o.thumb;delete o.id;o.zeit=new Date(e.zeit).toLocaleString('de-DE');return o});
+    const prompt=`Hier sind Tagebuch-Einträge (Mahlzeiten mit Einzelkomponenten und Symptome; Bristol 6–7 = Durchfall, 1–2 = hart). Aufgabe: Finde Komponenten oder Muster (z. B. Kaffeeart/-größe, Milch, Brotsorte, Marmelade, Rohkost, Alkohol, Mahlzeitenabstand, Uhrzeit, Wochentag), die an Tagen mit Durchfall oder Schmerzen 2–12 Stunden vorher gehäuft auftreten – im Vergleich zu beschwerdefreien Tagen. Nenne auch Komponenten, die auffällig OFT vorkommen und trotzdem NICHT zu Beschwerden führen (Entlastung). Sei ehrlich über die Datenbasis (Anzahl Tage, Anzahl Beschwerdetage). Keine Diagnose, nur Muster und konkrete Testvorschläge (eine Änderung pro Woche). Antworte auf Deutsch, kompakt, als Fließtext mit kurzen Absätzen.\n\nDATEN:\n${JSON.stringify(data)}`;
+    const txt=await callApi($('modelAnalyse').value,[{type:'text',text:prompt}],2000);
+    $('analyseText').textContent=txt;$('analyseOut').classList.remove('hidden');
+  }catch(err){alert(err.message)}
+  btn.disabled=false;btn.textContent='Auswerten';
+};
+
+// List
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function render(){
+  const list=$('viewList');list.innerHTML='';
+  if(!entries.length){list.innerHTML='<p class="mut" style="text-align:center;margin-top:40px">Noch keine Einträge. Erst unter ⚙︎ den API-Key eintragen, dann „+ Mahlzeit".</p>';return}
+  const sorted=entries.slice().sort((a,b)=>b.zeit.localeCompare(a.zeit));
+  let day='';
+  sorted.forEach(e=>{
+    const d=fmtDay(e.zeit);if(d!==day){day=d;const h=document.createElement('div');h.className='day';h.textContent=d;list.appendChild(h)}
+    const c=document.createElement('div');c.className='card entry'+(e.typ==='symptom'?' sym':'');
+    if(e.typ==='mahlzeit'){
+      c.innerHTML=`${e.thumb?`<img src="data:image/jpeg;base64,${e.thumb}">`:''}<div class="body"><div class="t">${fmtTime(e.zeit)} · Mahlzeit</div><div class="comp">${(e.komponenten||[]).map(k=>`<span class="pill">${esc(k.name)}</span>`).join('')}</div>${e.hinweis?`<div class="mut">${esc(e.hinweis)}</div>`:''}<button class="del">löschen</button></div>`;
+    }else{
+      c.innerHTML=`<div class="body"><div class="t">${fmtTime(e.zeit)} · Symptom</div><div><span class="pill b">Stuhl ${e.bristol===0?'–':'Bristol '+e.bristol}</span><span class="pill b">Schmerz ${e.schmerz}</span></div>${e.notiz?`<div class="mut">${esc(e.notiz)}</div>`:''}<button class="del">löschen</button></div>`;
+    }
+    c.querySelector('.del').onclick=()=>{if(confirm('Eintrag löschen?')){entries=entries.filter(x=>x.id!==e.id);save()}};
+    list.appendChild(c);
+  });
+}
+render();
+</script>
+</body>
+</html>
