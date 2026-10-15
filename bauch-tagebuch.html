@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v3</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v4</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -103,7 +103,11 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 
 <section id="viewSym" class="card hidden">
   <label>Zeitpunkt</label>
-  <input id="symTime" type="datetime-local">
+  <div class="row">
+    <input id="symTime" type="datetime-local">
+    <button class="btn sec" id="symFromPhoto" style="flex:0 0 auto;width:auto;padding:10px 12px;font-size:14px">📷 aus Foto</button>
+  </div>
+  <input id="symPhoto" type="file" accept="image/*" class="hidden">
   <label>Stuhl (Bristol 1 = hart … 7 = flüssig, 0 = kein Stuhlgang)</label>
   <div class="scale b" id="bristol"></div>
   <label>Bauchschmerz (0 = keine … 3 = stark)</label>
@@ -166,6 +170,13 @@ let bristol=0,pain=0;
 function buildScale(el,max,set){el.innerHTML='';for(let i=0;i<=max;i++){const b=document.createElement('button');b.textContent=i;b.onclick=()=>{set(i);[...el.children].forEach((c,j)=>c.classList.toggle('on',j===i))};el.appendChild(b)}el.children[0].classList.add('on')}
 buildScale($('bristol'),7,v=>bristol=v);
 buildScale($('pain'),3,v=>pain=v);
+$('symFromPhoto').onclick=()=>$('symPhoto').click();
+$('symPhoto').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  const d=readExifDate(await f.arrayBuffer());
+  if(d){$('symTime').value=fmtLocal(d)}else{$('symTime').value=fmtLocal(new Date(f.lastModified||Date.now()));alert('Keine Aufnahmezeit im Bild – Dateidatum übernommen, bitte prüfen')}
+  e.target.value='';
+};
 $('saveSym').onclick=()=>{
   const t=$('symTime').value;if(!t)return alert('Zeit fehlt');
   entries.push({id:uid(),typ:'symptom',zeit:new Date(t).toISOString(),bristol,schmerz:pain,notiz:$('symNote').value.trim()});
