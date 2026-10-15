@@ -296,12 +296,12 @@ function render(){
     const d=fmtDay(e.zeit);if(d!==day){day=d;const h=document.createElement('div');h.className='day';h.textContent=d;list.appendChild(h)}
     const c=document.createElement('div');c.className='card entry'+(e.typ==='symptom'?' sym':'');
     if(e.typ==='mahlzeit'){
-      c.innerHTML=`${e.thumb?`<img src="data:image/jpeg;base64,${e.thumb}">`:''}<div class="body"><div class="t">${fmtTime(e.zeit)} · Mahlzeit</div><div class="comp">${(e.komponenten||[]).map(k=>`<span class="pill">${esc(k.name)}</span>`).join('')}</div>${e.hinweis?`<div class="mut">${esc(e.hinweis)}</div>`:''}<button class="del edit" style="margin-right:14px;color:var(--acc)">bearbeiten</button><button class="del">löschen</button></div>`;
+      c.innerHTML=`${e.thumb?`<img src="data:image/jpeg;base64,${e.thumb}">`:''}<div class="body"><div class="t">${fmtTime(e.zeit)} · Mahlzeit</div><div class="comp">${(e.komponenten||[]).map(k=>`<span class="pill">${esc(k.name)}</span>`).join('')}</div>${e.hinweis?`<div class="mut">${esc(e.hinweis)}</div>`:''}<button class="del edit" style="margin-right:14px;color:var(--acc)">bearbeiten</button><button class="del rm">löschen</button></div>`;
       c.querySelector('.edit').onclick=()=>editEntry(e);
     }else{
-      c.innerHTML=`<div class="body"><div class="t">${fmtTime(e.zeit)} · Symptom</div><div><span class="pill b">Stuhl ${e.bristol===0?'–':'Bristol '+e.bristol}</span><span class="pill b">Schmerz ${e.schmerz}</span></div>${e.notiz?`<div class="mut">${esc(e.notiz)}</div>`:''}<button class="del">löschen</button></div>`;
+      c.innerHTML=`<div class="body"><div class="t">${fmtTime(e.zeit)} · Symptom</div><div><span class="pill b">Stuhl ${e.bristol===0?'–':'Bristol '+e.bristol}</span><span class="pill b">Schmerz ${e.schmerz}</span></div>${e.notiz?`<div class="mut">${esc(e.notiz)}</div>`:''}<button class="del rm">löschen</button></div>`;
     }
-    c.querySelector('.del').onclick=()=>{if(confirm('Eintrag löschen?')){entries=entries.filter(x=>x.id!==e.id);save()}};
+    c.querySelector('.rm').onclick=()=>{if(confirm('Eintrag löschen?')){entries=entries.filter(x=>x.id!==e.id);save()}};
     list.appendChild(c);
   });
 }
