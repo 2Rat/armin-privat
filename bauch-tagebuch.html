@@ -84,8 +84,20 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
     <input id="mealTime" type="datetime-local">
     <label>Ergänzung (optional, z. B. „großer Filterkaffee mit Milch")</label>
     <input id="mealHint" type="text">
-    <div style="margin-top:10px"><button class="btn" id="analyze">Auslesen und speichern</button></div>
-    <div id="result" class="card hidden" style="margin-top:10px"></div>
+    <div style="margin-top:10px"><button class="btn" id="analyze">Auslesen</button></div>
+  </div>
+  <div id="editor" class="hidden" style="margin-top:10px">
+    <label>Bestandteile – antippen zum Ändern, × entfernt</label>
+    <div id="editPills"></div>
+    <div class="row" style="margin-top:8px">
+      <input id="addComp" type="text" placeholder="Bestandteil hinzufügen, z. B. Filterkaffee groß mit Milch">
+      <button class="btn sec" id="addCompBtn" style="flex:0 0 auto;width:auto">+</button>
+    </div>
+    <p class="mut" id="editUnsicher"></p>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="saveMeal">Speichern</button>
+      <button class="btn sec" id="cancelMeal">Abbrechen</button>
+    </div>
   </div>
 </section>
 
@@ -145,7 +157,7 @@ $('btnImport').onclick=()=>$('importFile').click();
 $('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{const arr=JSON.parse(t);if(!Array.isArray(arr))throw 0;const ids=new Set(entries.map(x=>x.id));let n=0;arr.forEach(x=>{if(!ids.has(x.id)){entries.push(x);n++}});save();alert(n+' Einträge importiert')}).catch(()=>alert('Datei nicht lesbar'));e.target.value=''};
 
 // Tabs
-$('tabNew').onclick=()=>{resetNew();show('viewNew')};
+$('tabNew').onclick=()=>{resetNew();$('analyze').parentElement.classList.remove('hidden');$('analyze').textContent='Auslesen';show('viewNew')};
 $('tabSym').onclick=()=>{$('symTime').value=fmtLocal(new Date());show('viewSym')};
 $('tabAnalyse').onclick=()=>show('viewAnalyse');
 
@@ -161,8 +173,39 @@ $('saveSym').onclick=()=>{
 };
 
 // Meal photo
-let currentImg=null,currentThumb=null;
-function resetNew(){currentImg=null;currentThumb=null;$('preview').classList.add('hidden');$('result').classList.add('hidden');$('mealHint').value='';$('fileGallery').value='';$('fileCamera').value=''}
+let currentImg=null,currentThumb=null,draft=null; // draft = Eintrag in Bearbeitung
+function resetNew(){currentImg=null;currentThumb=null;draft=null;$('preview').classList.add('hidden');$('editor').classList.add('hidden');$('mealHint').value='';$('fileGallery').value='';$('fileCamera').value='';$('pickGallery').parentElement.classList.remove('hidden')}
+function renderEditor(){
+  const el=$('editPills');el.innerHTML='';
+  (draft.komponenten||[]).forEach((k,i)=>{
+    const s=document.createElement('span');s.className='pill';s.style.cssText='font-size:14px;padding:6px 10px;margin:3px';
+    s.innerHTML=`<span class="nm">${esc(k.name)}${k.menge?' · '+esc(k.menge):''}</span> <b style="margin-left:6px;cursor:pointer">×</b>`;
+    s.querySelector('.nm').onclick=()=>{const v=prompt('Bestandteil ändern (Name · Menge):',k.name+(k.menge?' · '+k.menge:''));if(v===null)return;const p=v.split('·');k.name=p[0].trim();k.menge=(p[1]||'').trim();renderEditor()};
+    s.querySelector('b').onclick=()=>{draft.komponenten.splice(i,1);renderEditor()};
+    el.appendChild(s);
+  });
+  $('editUnsicher').textContent=draft.unsicher?('KI unsicher bei: '+draft.unsicher):'';
+  $('editor').classList.remove('hidden');
+}
+$('addCompBtn').onclick=()=>{const v=$('addComp').value.trim();if(!v||!draft)return;const p=v.split('·');draft.komponenten.push({name:p[0].trim(),menge:(p[1]||'').trim(),kategorie:''});$('addComp').value='';renderEditor()};
+$('addComp').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('addCompBtn').click()}};
+$('saveMeal').onclick=()=>{
+  if(!draft)return;
+  if($('mealTime').value)draft.zeit=new Date($('mealTime').value).toISOString();
+  draft.hinweis=$('mealHint').value.trim();
+  const i=entries.findIndex(x=>x.id===draft.id);
+  if(i>=0)entries[i]=draft;else entries.push(draft);
+  save();resetNew();show(null);
+};
+$('cancelMeal').onclick=()=>{resetNew();show(null)};
+function editEntry(e){
+  draft=JSON.parse(JSON.stringify(e));
+  $('pickGallery').parentElement.classList.add('hidden');
+  $('previewImg').src=e.thumb?'data:image/jpeg;base64,'+e.thumb:'';
+  $('mealTime').value=fmtLocal(new Date(e.zeit));$('mealHint').value=e.hinweis||'';
+  $('preview').classList.remove('hidden');$('analyze').parentElement.classList.add('hidden');
+  renderEditor();show('viewNew');
+}
 $('pickGallery').onclick=()=>$('fileGallery').click();
 $('pickCamera').onclick=()=>$('fileCamera').click();
 $('fileGallery').onchange=onFile;$('fileCamera').onchange=onFile;
@@ -224,13 +267,10 @@ $('analyze').onclick=async()=>{
     const content=[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:currentImg}},{type:'text',text:MEAL_PROMPT+(hint?`\nZusatzinfo vom Nutzer: ${hint}`:'')}];
     const txt=await callApi(localStorage.getItem(LSM)||'claude-haiku-4-5-20251001',content,800);
     const m=txt.match(/\{[\s\S]*\}/);const j=JSON.parse(m?m[0]:txt);
-    const e={id:uid(),typ:'mahlzeit',zeit:new Date($('mealTime').value).toISOString(),komponenten:j.komponenten||[],kaffee:j.kaffee||null,unsicher:j.unsicher||'',hinweis:hint,thumb:currentThumb};
-    entries.push(e);save();
-    $('result').innerHTML='<b>Gespeichert:</b><br>'+e.komponenten.map(k=>`<span class="pill">${esc(k.name)} · ${esc(k.menge||'')}</span>`).join(' ')+(e.unsicher?`<p class="mut">Unsicher: ${esc(e.unsicher)}</p>`:'');
-    $('result').classList.remove('hidden');
-    setTimeout(()=>{resetNew();show(null)},1800);
+    draft={id:uid(),typ:'mahlzeit',zeit:new Date($('mealTime').value).toISOString(),komponenten:j.komponenten||[],kaffee:j.kaffee||null,unsicher:j.unsicher||'',hinweis:hint,thumb:currentThumb};
+    renderEditor();
   }catch(err){alert(err.message)}
-  btn.disabled=false;btn.textContent='Auslesen und speichern';
+  btn.disabled=false;btn.textContent='Erneut auslesen';
 };
 
 // Analyse
@@ -256,7 +296,8 @@ function render(){
     const d=fmtDay(e.zeit);if(d!==day){day=d;const h=document.createElement('div');h.className='day';h.textContent=d;list.appendChild(h)}
     const c=document.createElement('div');c.className='card entry'+(e.typ==='symptom'?' sym':'');
     if(e.typ==='mahlzeit'){
-      c.innerHTML=`${e.thumb?`<img src="data:image/jpeg;base64,${e.thumb}">`:''}<div class="body"><div class="t">${fmtTime(e.zeit)} · Mahlzeit</div><div class="comp">${(e.komponenten||[]).map(k=>`<span class="pill">${esc(k.name)}</span>`).join('')}</div>${e.hinweis?`<div class="mut">${esc(e.hinweis)}</div>`:''}<button class="del">löschen</button></div>`;
+      c.innerHTML=`${e.thumb?`<img src="data:image/jpeg;base64,${e.thumb}">`:''}<div class="body"><div class="t">${fmtTime(e.zeit)} · Mahlzeit</div><div class="comp">${(e.komponenten||[]).map(k=>`<span class="pill">${esc(k.name)}</span>`).join('')}</div>${e.hinweis?`<div class="mut">${esc(e.hinweis)}</div>`:''}<button class="del edit" style="margin-right:14px;color:var(--acc)">bearbeiten</button><button class="del">löschen</button></div>`;
+      c.querySelector('.edit').onclick=()=>editEntry(e);
     }else{
       c.innerHTML=`<div class="body"><div class="t">${fmtTime(e.zeit)} · Symptom</div><div><span class="pill b">Stuhl ${e.bristol===0?'–':'Bristol '+e.bristol}</span><span class="pill b">Schmerz ${e.schmerz}</span></div>${e.notiz?`<div class="mut">${esc(e.notiz)}</div>`:''}<button class="del">löschen</button></div>`;
     }
