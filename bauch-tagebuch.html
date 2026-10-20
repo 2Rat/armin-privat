@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v10</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v11</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -293,7 +293,7 @@ async function callApi(model,content,maxTokens,timeoutMs){
   const key=localStorage.getItem(LSK);if(!key)throw new Error('Kein API-Key – unter ⚙︎ eintragen');
   const ac=new AbortController();const to=setTimeout(()=>ac.abort(),timeoutMs||60000);
   let r;
-  try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,messages:[{role:'user',content}]})})}
+  try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,thinking:{type:'disabled'},messages:[{role:'user',content}]})})}
   catch(e){clearTimeout(to);throw new Error(e.name==='AbortError'?'Zeitüberschreitung – keine Antwort von der API':'Netzwerkfehler: '+e.message)}
   clearTimeout(to);
   if(!r.ok){const t=await r.text();const err=new Error('API '+r.status+': '+t.slice(0,300));err.status=r.status;throw err}
@@ -303,7 +303,7 @@ async function callApiStream(model,content,maxTokens,onText,timeoutMs){
   const key=localStorage.getItem(LSK);if(!key)throw new Error('Kein API-Key – unter ⚙︎ eintragen');
   const ac=new AbortController();let to=setTimeout(()=>ac.abort(),timeoutMs||60000);
   let r;
-  try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,stream:true,messages:[{role:'user',content}]})})}
+  try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,stream:true,thinking:{type:'disabled'},messages:[{role:'user',content}]})})}
   catch(e){clearTimeout(to);throw new Error(e.name==='AbortError'?'Zeitüberschreitung – keine Antwort von der API':'Netzwerkfehler: '+e.message)}
   if(!r.ok){clearTimeout(to);const t=await r.text();const err=new Error('API '+r.status+': '+t.slice(0,300));err.status=r.status;throw err}
   const rd=r.body.getReader();const dec=new TextDecoder();let buf='',out='',raw='',stop='';
@@ -365,7 +365,7 @@ DATEN:\n${JSON.stringify(data)}`;
     const model=$('modelAnalyse').value;
     const stampLive='Auswertung läuft ('+model+') …\n\n';
     $('analyseOut').classList.remove('hidden');$('analyseText').textContent=stampLive;
-    const txt=await callApiStream(model,[{type:'text',text:prompt}],3000,t=>{$('analyseText').textContent=stampLive+t},60000);
+    const txt=await callApiStream(model,[{type:'text',text:prompt}],8000,t=>{$('analyseText').textContent=stampLive+t},60000);
     const stamp='Auswertung vom '+new Date().toLocaleString('de-DE')+' ('+entries.length+' Einträge)\n\n';
     $('analyseText').textContent=stamp+txt;$('analyseOut').classList.remove('hidden');
     localStorage.setItem('bauchtagebuch.analyse',stamp+txt);
