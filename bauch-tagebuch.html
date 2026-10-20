@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v5</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v6</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -75,6 +75,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
   <div class="row">
     <button class="btn" id="pickGallery">📷 Foto aus Galerie</button>
     <button class="btn sec" id="pickCamera">Kamera</button>
+    <button class="btn sec" id="noPhoto">ohne Foto</button>
   </div>
   <input id="fileGallery" type="file" accept="image/*" class="hidden">
   <input id="fileCamera" type="file" accept="image/*" capture="environment" class="hidden">
@@ -165,12 +166,18 @@ $('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().the
 
 // Tabs
 $('tabNew').onclick=()=>{resetNew();$('analyze').parentElement.classList.remove('hidden');$('analyze').textContent='Auslesen';show('viewNew')};
-$('tabSym').onclick=()=>{$('symTime').value=fmtLocal(new Date());show('viewSym')};
+$('tabSym').onclick=()=>{symEditId=null;$('symTime').value=fmtLocal(new Date());$('symNote').value='';setScale($('bristol'),0);setScale($('pain'),0);bristol=0;pain=0;show('viewSym')};
 $('tabAnalyse').onclick=()=>show('viewAnalyse');
 
 // Symptom scales
-let bristol=0,pain=0;
-function buildScale(el,max,set){el.innerHTML='';for(let i=0;i<=max;i++){const b=document.createElement('button');b.textContent=i;b.onclick=()=>{set(i);[...el.children].forEach((c,j)=>c.classList.toggle('on',j===i))};el.appendChild(b)}el.children[0].classList.add('on')}
+let bristol=0,pain=0,symEditId=null;
+function buildScale(el,max,set){el.innerHTML='';for(let i=0;i<=max;i++){const b=document.createElement('button');b.textContent=i;b.onclick=()=>{set(i);setScale(el,i)};el.appendChild(b)}el.children[0].classList.add('on')}
+function setScale(el,v){[...el.children].forEach((c,j)=>c.classList.toggle('on',j===v))}
+function editSym(e){
+  symEditId=e.id;bristol=e.bristol||0;pain=e.schmerz||0;
+  $('symTime').value=fmtLocal(new Date(e.zeit));$('symNote').value=e.notiz||'';
+  setScale($('bristol'),bristol);setScale($('pain'),pain);show('viewSym');
+}
 buildScale($('bristol'),7,v=>bristol=v);
 buildScale($('pain'),3,v=>pain=v);
 $('symFromPhoto').onclick=()=>$('symPhoto').click();
@@ -182,13 +189,14 @@ $('symPhoto').onchange=async e=>{
 };
 $('saveSym').onclick=()=>{
   const t=$('symTime').value;if(!t)return alert('Zeit fehlt');
-  entries.push({id:uid(),typ:'symptom',zeit:new Date(t).toISOString(),bristol,schmerz:pain,notiz:$('symNote').value.trim()});
-  save();$('symNote').value='';bristol=0;pain=0;buildScale($('bristol'),7,v=>bristol=v);buildScale($('pain'),3,v=>pain=v);show(null);
+  const s={id:symEditId||uid(),typ:'symptom',zeit:new Date(t).toISOString(),bristol,schmerz:pain,notiz:$('symNote').value.trim()};
+  const i=entries.findIndex(x=>x.id===s.id);if(i>=0)entries[i]=s;else entries.push(s);
+  symEditId=null;save();show(null);
 };
 
 // Meal photo
 let currentImg=null,currentThumb=null,draft=null; // draft = Eintrag in Bearbeitung
-function resetNew(){currentImg=null;currentThumb=null;draft=null;$('preview').classList.add('hidden');$('editor').classList.add('hidden');$('mealHint').value='';$('fileGallery').value='';$('fileCamera').value='';$('pickGallery').parentElement.classList.remove('hidden')}
+function resetNew(){currentImg=null;currentThumb=null;draft=null;$('preview').classList.add('hidden');$('previewImg').classList.remove('hidden');$('editor').classList.add('hidden');$('mealHint').value='';$('fileGallery').value='';$('fileCamera').value='';$('pickGallery').parentElement.classList.remove('hidden')}
 function renderEditor(){
   const el=$('editPills');el.innerHTML='';
   (draft.komponenten||[]).forEach((k,i)=>{
@@ -215,13 +223,21 @@ $('cancelMeal').onclick=()=>{resetNew();show(null)};
 function editEntry(e){
   draft=JSON.parse(JSON.stringify(e));
   $('pickGallery').parentElement.classList.add('hidden');
-  $('previewImg').src=e.thumb?'data:image/jpeg;base64,'+e.thumb:'';
+  $('previewImg').src=e.thumb?'data:image/jpeg;base64,'+e.thumb:'';$('previewImg').classList.toggle('hidden',!e.thumb);
   $('mealTime').value=fmtLocal(new Date(e.zeit));$('mealHint').value=e.hinweis||'';
   $('preview').classList.remove('hidden');$('analyze').parentElement.classList.add('hidden');
   renderEditor();show('viewNew');
 }
 $('pickGallery').onclick=()=>$('fileGallery').click();
 $('pickCamera').onclick=()=>$('fileCamera').click();
+$('noPhoto').onclick=()=>{
+  draft={id:uid(),typ:'mahlzeit',zeit:new Date().toISOString(),komponenten:[],kaffee:null,unsicher:'',hinweis:'',thumb:null};
+  $('pickGallery').parentElement.classList.add('hidden');
+  $('previewImg').src='';$('previewImg').classList.add('hidden');
+  $('mealTime').value=fmtLocal(new Date());
+  $('preview').classList.remove('hidden');$('analyze').parentElement.classList.add('hidden');
+  renderEditor();setTimeout(()=>$('addComp').focus(),100);
+};
 $('fileGallery').onchange=onFile;$('fileCamera').onchange=onFile;
 async function onFile(e){
   const f=e.target.files[0];if(!f)return;
@@ -313,7 +329,8 @@ function render(){
       c.innerHTML=`${e.thumb?`<img src="data:image/jpeg;base64,${e.thumb}">`:''}<div class="body"><div class="t">${fmtTime(e.zeit)} · Mahlzeit</div><div class="comp">${(e.komponenten||[]).map(k=>`<span class="pill">${esc(k.name)}</span>`).join('')}</div>${e.hinweis?`<div class="mut">${esc(e.hinweis)}</div>`:''}<button class="del edit" style="margin-right:14px;color:var(--acc)">bearbeiten</button><button class="del rm">löschen</button></div>`;
       c.querySelector('.edit').onclick=()=>editEntry(e);
     }else{
-      c.innerHTML=`<div class="body"><div class="t">${fmtTime(e.zeit)} · Symptom</div><div><span class="pill b">Stuhl ${e.bristol===0?'–':'Bristol '+e.bristol}</span><span class="pill b">Schmerz ${e.schmerz}</span></div>${e.notiz?`<div class="mut">${esc(e.notiz)}</div>`:''}<button class="del rm">löschen</button></div>`;
+      c.innerHTML=`<div class="body"><div class="t">${fmtTime(e.zeit)} · Symptom</div><div><span class="pill b">Stuhl ${e.bristol===0?'–':'Bristol '+e.bristol}</span><span class="pill b">Schmerz ${e.schmerz}</span></div>${e.notiz?`<div class="mut">${esc(e.notiz)}</div>`:''}<button class="del edit" style="margin-right:14px;color:var(--acc)">bearbeiten</button><button class="del rm">löschen</button></div>`;
+      c.querySelector('.edit').onclick=()=>editSym(e);
     }
     c.querySelector('.rm').onclick=()=>{if(confirm('Eintrag löschen?')){entries=entries.filter(x=>x.id!==e.id);save()}};
     list.appendChild(c);
