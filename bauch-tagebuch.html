@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v14</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v15</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -113,6 +113,10 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
   <div class="scale b" id="bristol"></div>
   <label>Bauchschmerz (0 = keine … 3 = stark)</label>
   <div class="scale b" id="pain"></div>
+  <label>Stress heute (0 = entspannt … 3 = stark)</label>
+  <div class="scale b" id="stress"></div>
+  <label>Schlaf letzte Nacht (0 = nicht erfasst, 1 = schlecht … 3 = gut) · Stunden</label>
+  <div class="row"><div class="scale b" id="sleep" style="flex:3"></div><input id="sleepH" type="number" step="0.5" min="0" max="14" placeholder="Std." style="flex:1"></div>
   <label>Notiz</label>
   <textarea id="symNote" placeholder="z. B. Krämpfe nach dem Frühstück, Blähungen …"></textarea>
   <div style="margin-top:10px"><button class="btn" id="saveSym">Speichern</button></div>
@@ -168,20 +172,22 @@ $('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().the
 
 // Tabs
 $('tabNew').onclick=()=>{resetNew();$('analyze').parentElement.classList.remove('hidden');$('analyze').textContent='Auslesen';show('viewNew')};
-$('tabSym').onclick=()=>{symEditId=null;$('symTime').value=fmtLocal(new Date());$('symNote').value='';setScale($('bristol'),0);setScale($('pain'),0);bristol=0;pain=0;show('viewSym')};
+$('tabSym').onclick=()=>{symEditId=null;$('symTime').value=fmtLocal(new Date());$('symNote').value='';$('sleepH').value='';setScale($('bristol'),0);setScale($('pain'),0);setScale($('stress'),0);setScale($('sleep'),0);bristol=0;pain=0;stress=0;sleep=0;show('viewSym')};
 $('tabAnalyse').onclick=()=>show('viewAnalyse');
 
 // Symptom scales
-let bristol=0,pain=0,symEditId=null;
+let bristol=0,pain=0,stress=0,sleep=0,symEditId=null;
 function buildScale(el,max,set){el.innerHTML='';for(let i=0;i<=max;i++){const b=document.createElement('button');b.textContent=i;b.onclick=()=>{set(i);setScale(el,i)};el.appendChild(b)}el.children[0].classList.add('on')}
 function setScale(el,v){[...el.children].forEach((c,j)=>c.classList.toggle('on',j===v))}
 function editSym(e){
-  symEditId=e.id;bristol=e.bristol||0;pain=e.schmerz||0;
+  symEditId=e.id;bristol=e.bristol||0;pain=e.schmerz||0;stress=e.stress||0;sleep=e.schlaf||0;$('sleepH').value=e.schlafStd||'';
   $('symTime').value=fmtLocal(new Date(e.zeit));$('symNote').value=e.notiz||'';
-  setScale($('bristol'),bristol);setScale($('pain'),pain);show('viewSym');
+  setScale($('bristol'),bristol);setScale($('pain'),pain);setScale($('stress'),stress);setScale($('sleep'),sleep);show('viewSym');
 }
 buildScale($('bristol'),7,v=>bristol=v);
 buildScale($('pain'),3,v=>pain=v);
+buildScale($('stress'),3,v=>stress=v);
+buildScale($('sleep'),3,v=>sleep=v);
 $('symFromPhoto').onclick=()=>$('symPhoto').click();
 $('symPhoto').onchange=async e=>{
   const f=e.target.files[0];if(!f)return;
@@ -191,7 +197,7 @@ $('symPhoto').onchange=async e=>{
 };
 $('saveSym').onclick=()=>{
   const t=$('symTime').value;if(!t)return alert('Zeit fehlt');
-  const s={id:symEditId||uid(),typ:'symptom',zeit:new Date(t).toISOString(),bristol,schmerz:pain,notiz:$('symNote').value.trim()};
+  const s={id:symEditId||uid(),typ:'symptom',zeit:new Date(t).toISOString(),bristol,schmerz:pain,stress,schlaf:sleep,schlafStd:+$('sleepH').value||null,notiz:$('symNote').value.trim()};
   const i=entries.findIndex(x=>x.id===s.id);if(i>=0)entries[i]=s;else entries.push(s);
   symEditId=null;save();show(null);
 };
@@ -357,11 +363,11 @@ $('runAnalyse').onclick=async()=>{
   try{
     if(!entries.length)throw new Error('Noch keine Einträge');
     const data=entries.slice().sort((a,b)=>a.zeit.localeCompare(b.zeit)).map(e=>{const o={...e};delete o.thumb;delete o.id;o.zeit=new Date(e.zeit).toLocaleString('de-DE');return o});
-    const prompt=`Du bist Gastroenterologe und wertest ein Ernährungs-Symptom-Tagebuch aus. Die Person hat seit 20 Jahren morgendliche Durchfälle in Schüben kurz nach dem Frühstück, mit Krämpfen danach; Laktose, Fruktose, Sorbit, Gluten, Galle, Pankreas und Zöliakie sind abgeklärt. Bristol 6–7 = Durchfall, 1–2 = hart, 0 = kein Stuhlgang. Schmerz 0–3.
+    const prompt=`Du bist Gastroenterologe und wertest ein Ernährungs-Symptom-Tagebuch aus. Die Person hat seit 20 Jahren morgendliche Durchfälle in Schüben kurz nach dem Frühstück, mit Krämpfen danach; Laktose, Fruktose, Sorbit, Gluten, Galle, Pankreas und Zöliakie sind abgeklärt. Bristol 6–7 = Durchfall, 1–2 = hart, 0 = kein Stuhlgang. Schmerz 0–3. Stress 0–3 (0 = nicht erfasst oder entspannt). Schlaf 1–3 (1 schlecht, 3 gut; 0 = nicht erfasst), schlafStd = Stunden.
 
 Gehe so vor und gliedere die Antwort mit diesen Überschriften:
 1. DATENBASIS: Zeitraum, Anzahl Tage, Tage mit Durchfall (Bristol ≥6), Tage ohne, Mahlzeiten pro Tag. Benenne Lücken (Tage ohne Symptom-Eintrag, Tage ohne Mahlzeiten).
-2. TAGESMUSTER: Uhrzeit des ersten Durchfalls, Abstand zur letzten Mahlzeit davor, Abstand zur Mahlzeit des Vorabends. Gibt es einen Zusammenhang mit spätem Essen oder Alkohol am Vorabend?
+2. TAGESMUSTER: Uhrzeit des ersten Durchfalls, Abstand zur letzten Mahlzeit davor, Abstand zur Mahlzeit des Vorabends. Gibt es einen Zusammenhang mit spätem Essen oder Alkohol am Vorabend, mit Stress oder mit Schlaf (Qualität, Dauer)?
 3. VERDÄCHTIGE KOMPONENTEN: Für jede Komponente, die mindestens 3-mal vorkommt: wie oft folgte innerhalb von 2–14 Stunden Durchfall, wie oft nicht. Als Tabelle (Komponente | n | davon mit Durchfall | Quote). Besonders Kaffee (Art, Größe, Milch), Rohkost, Obst, Brot, Wurst, Milchprodukte, Alkohol.
 4. ENTLASTETE KOMPONENTEN: was oft vorkommt und trotzdem selten Beschwerden folgt.
 5. HYPOTHESEN: maximal drei, mit dem konkreten Beleg aus den Daten. Sag ehrlich, wenn die Datenbasis für eine Aussage zu klein ist.
@@ -396,7 +402,7 @@ function render(){
       c.innerHTML=`${e.thumb?`<img src="data:image/jpeg;base64,${e.thumb}">`:''}<div class="body"><div class="t">${fmtTime(e.zeit)} · Mahlzeit</div><div class="comp">${(e.komponenten||[]).map(k=>`<span class="pill">${esc(k.name)}</span>`).join('')}</div>${e.hinweis?`<div class="mut">${esc(e.hinweis)}</div>`:''}<button class="del edit" style="margin-right:14px;color:var(--acc)">bearbeiten</button><button class="del rm">löschen</button></div>`;
       c.querySelector('.edit').onclick=()=>editEntry(e);
     }else{
-      c.innerHTML=`<div class="body"><div class="t">${fmtTime(e.zeit)} · Symptom</div><div><span class="pill b">Stuhl ${e.bristol===0?'–':'Bristol '+e.bristol}</span><span class="pill b">Schmerz ${e.schmerz}</span></div>${e.notiz?`<div class="mut">${esc(e.notiz)}</div>`:''}<button class="del edit" style="margin-right:14px;color:var(--acc)">bearbeiten</button><button class="del rm">löschen</button></div>`;
+      c.innerHTML=`<div class="body"><div class="t">${fmtTime(e.zeit)} · Symptom</div><div><span class="pill b">Stuhl ${e.bristol===0?'–':'Bristol '+e.bristol}</span><span class="pill b">Schmerz ${e.schmerz}</span>${e.stress?`<span class="pill b">Stress ${e.stress}</span>`:''}${e.schlaf?`<span class="pill b">Schlaf ${e.schlaf}${e.schlafStd?' · '+e.schlafStd+' h':''}</span>`:''}</div>${e.notiz?`<div class="mut">${esc(e.notiz)}</div>`:''}<button class="del edit" style="margin-right:14px;color:var(--acc)">bearbeiten</button><button class="del rm">löschen</button></div>`;
       c.querySelector('.edit').onclick=()=>editSym(e);
     }
     c.querySelector('.rm').onclick=()=>{if(confirm('Eintrag löschen?')){entries=entries.filter(x=>x.id!==e.id);save()}};
