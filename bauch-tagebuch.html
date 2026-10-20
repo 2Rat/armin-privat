@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v12</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v13</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -306,16 +306,19 @@ async function callApiStream(model,content,maxTokens,onText,timeoutMs){
   try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,stream:true,thinking:{type:'adaptive'},output_config:{effort:'medium'},messages:[{role:'user',content}]})})}
   catch(e){clearTimeout(to);throw new Error(e.name==='AbortError'?'Zeitüberschreitung – keine Antwort von der API':'Netzwerkfehler: '+e.message)}
   if(!r.ok){clearTimeout(to);const t=await r.text();const err=new Error('API '+r.status+': '+t.slice(0,300));err.status=r.status;throw err}
-  const rd=r.body.getReader();const dec=new TextDecoder();let buf='',out='',raw='',stop='';
+  const rd=r.body.getReader();const dec=new TextDecoder();let buf='',out='',raw='',stop='',thinkN=0;
   while(true){
-    const {value,done}=await rd.read();if(done)break;
-    clearTimeout(to);to=setTimeout(()=>ac.abort(),30000); // 30 s ohne neue Daten = Abbruch
+    let value,done;
+    try{({value,done}=await rd.read())}catch(e){clearTimeout(to);throw new Error(e.name==='AbortError'?'Abbruch: 3 Minuten keine Daten von der API':'Verbindung abgebrochen: '+e.message)}
+    if(done)break;
+    clearTimeout(to);to=setTimeout(()=>ac.abort(),180000);
     const chunk=dec.decode(value,{stream:true});buf+=chunk;if(raw.length<4000)raw+=chunk;
     let i;while((i=buf.indexOf('\n'))>=0){
       const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
       if(!line.startsWith('data:'))continue;
       try{const ev=JSON.parse(line.slice(5));
         if(ev.type==='content_block_delta'&&ev.delta&&ev.delta.text){out+=ev.delta.text;onText(out)}
+        else if(ev.type==='content_block_delta'&&ev.delta&&ev.delta.thinking!==undefined&&!out){thinkN=(thinkN||0)+1;onText('',thinkN)}
         if(ev.type==='message_delta'&&ev.delta&&ev.delta.stop_reason)stop=ev.delta.stop_reason;
         if(ev.type==='error')throw new Error('API: '+(ev.error&&ev.error.message||'Fehler'))
       }catch(e){if(e.message.startsWith('API'))throw e}
@@ -365,7 +368,7 @@ DATEN:\n${JSON.stringify(data)}`;
     const model=$('modelAnalyse').value;
     const stampLive='Auswertung läuft ('+model+') – das Modell denkt erst nach, Text folgt …\n\n';
     $('analyseOut').classList.remove('hidden');$('analyseText').textContent=stampLive;
-    const txt=await callApiStream(model,[{type:'text',text:prompt}],8000,t=>{$('analyseText').textContent=stampLive+t},60000);
+    const txt=await callApiStream(model,[{type:'text',text:prompt}],8000,(t,n)=>{$('analyseText').textContent=t?stampLive+t:stampLive+'Nachdenken … '+'·'.repeat(Math.min(n||0,60))},120000);
     const stamp='Auswertung vom '+new Date().toLocaleString('de-DE')+' ('+entries.length+' Einträge)\n\n';
     $('analyseText').textContent=stamp+txt;$('analyseOut').classList.remove('hidden');
     localStorage.setItem('bauchtagebuch.analyse',stamp+txt);
