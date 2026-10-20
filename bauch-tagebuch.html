@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v13</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v14</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -122,8 +122,8 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
   <p class="mut">Schickt alle Einträge (ohne Bilder) an die API und sucht nach Komponenten, die an Durchfall-Tagen 2–12 h vorher gehäuft auftreten. Sinnvoll ab ca. 3 Wochen Daten.</p>
   <label>Modell</label>
   <select id="modelAnalyse">
-    <option value="claude-opus-5-5">Opus 5.5 (empfohlen für Mustersuche)</option>
-    <option value="claude-sonnet-5-5">Sonnet 5.5</option>
+    <option value="claude-sonnet-5-5">Sonnet 5.5 (empfohlen)</option>
+    <option value="claude-opus-5-5">Opus 5.5 (gründlich, langsam, teurer)</option>
     <option value="claude-haiku-5-5">Haiku 5.5 (günstig)</option>
   </select>
   <div style="margin-top:10px"><button class="btn" id="runAnalyse">Auswerten</button></div>
@@ -293,17 +293,22 @@ async function callApi(model,content,maxTokens,timeoutMs){
   const key=localStorage.getItem(LSK);if(!key)throw new Error('Kein API-Key – unter ⚙︎ eintragen');
   const ac=new AbortController();const to=setTimeout(()=>ac.abort(),timeoutMs||60000);
   let r;
-  try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,thinking:{type:'adaptive'},output_config:{effort:'low'},messages:[{role:'user',content}]})})}
+  try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(Object.assign({model,max_tokens:maxTokens,messages:[{role:'user',content}]},thinkCfg(model)))})}
   catch(e){clearTimeout(to);throw new Error(e.name==='AbortError'?'Zeitüberschreitung – keine Antwort von der API':'Netzwerkfehler: '+e.message)}
   clearTimeout(to);
   if(!r.ok){const t=await r.text();const err=new Error('API '+r.status+': '+t.slice(0,300));err.status=r.status;throw err}
   const j=await r.json();return (j.content||[]).map(c=>c.text||'').join('');
 }
+function thinkCfg(model,kind){
+  if(model.startsWith('claude-opus'))return {thinking:{type:'adaptive'},output_config:{effort:'low'}};
+  if(model.startsWith('claude-sonnet'))return {thinking:{type:'between_tools'},output_config:{effort:'low'}};
+  return {thinking:{type:'disabled'},output_config:{effort:'low'}};
+}
 async function callApiStream(model,content,maxTokens,onText,timeoutMs){
   const key=localStorage.getItem(LSK);if(!key)throw new Error('Kein API-Key – unter ⚙︎ eintragen');
   const ac=new AbortController();let to=setTimeout(()=>ac.abort(),timeoutMs||60000);
   let r;
-  try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,stream:true,thinking:{type:'adaptive'},output_config:{effort:'medium'},messages:[{role:'user',content}]})})}
+  try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(Object.assign({model,max_tokens:maxTokens,stream:true,messages:[{role:'user',content}]},thinkCfg(model)))})}
   catch(e){clearTimeout(to);throw new Error(e.name==='AbortError'?'Zeitüberschreitung – keine Antwort von der API':'Netzwerkfehler: '+e.message)}
   if(!r.ok){clearTimeout(to);const t=await r.text();const err=new Error('API '+r.status+': '+t.slice(0,300));err.status=r.status;throw err}
   const rd=r.body.getReader();const dec=new TextDecoder();let buf='',out='',raw='',stop='',thinkN=0;
@@ -368,7 +373,7 @@ DATEN:\n${JSON.stringify(data)}`;
     const model=$('modelAnalyse').value;
     const stampLive='Auswertung läuft ('+model+') – das Modell denkt erst nach, Text folgt …\n\n';
     $('analyseOut').classList.remove('hidden');$('analyseText').textContent=stampLive;
-    const txt=await callApiStream(model,[{type:'text',text:prompt}],8000,(t,n)=>{$('analyseText').textContent=t?stampLive+t:stampLive+'Nachdenken … '+'·'.repeat(Math.min(n||0,60))},120000);
+    const txt=await callApiStream(model,[{type:'text',text:prompt}],model.startsWith('claude-opus')?32000:16000,(t,n)=>{$('analyseText').textContent=t?stampLive+t:stampLive+'Nachdenken … '+'·'.repeat(Math.min(n||0,60))},120000);
     const stamp='Auswertung vom '+new Date().toLocaleString('de-DE')+' ('+entries.length+' Einträge)\n\n';
     $('analyseText').textContent=stamp+txt;$('analyseOut').classList.remove('hidden');
     localStorage.setItem('bauchtagebuch.analyse',stamp+txt);
