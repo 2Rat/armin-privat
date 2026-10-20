@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v9</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v10</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -306,21 +306,24 @@ async function callApiStream(model,content,maxTokens,onText,timeoutMs){
   try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,stream:true,messages:[{role:'user',content}]})})}
   catch(e){clearTimeout(to);throw new Error(e.name==='AbortError'?'Zeitüberschreitung – keine Antwort von der API':'Netzwerkfehler: '+e.message)}
   if(!r.ok){clearTimeout(to);const t=await r.text();const err=new Error('API '+r.status+': '+t.slice(0,300));err.status=r.status;throw err}
-  const rd=r.body.getReader();const dec=new TextDecoder();let buf='',out='';
+  const rd=r.body.getReader();const dec=new TextDecoder();let buf='',out='',raw='',stop='';
   while(true){
     const {value,done}=await rd.read();if(done)break;
     clearTimeout(to);to=setTimeout(()=>ac.abort(),30000); // 30 s ohne neue Daten = Abbruch
-    buf+=dec.decode(value,{stream:true});
+    const chunk=dec.decode(value,{stream:true});buf+=chunk;if(raw.length<4000)raw+=chunk;
     let i;while((i=buf.indexOf('\n'))>=0){
       const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
       if(!line.startsWith('data:'))continue;
       try{const ev=JSON.parse(line.slice(5));
         if(ev.type==='content_block_delta'&&ev.delta&&ev.delta.text){out+=ev.delta.text;onText(out)}
+        if(ev.type==='message_delta'&&ev.delta&&ev.delta.stop_reason)stop=ev.delta.stop_reason;
         if(ev.type==='error')throw new Error('API: '+(ev.error&&ev.error.message||'Fehler'))
       }catch(e){if(e.message.startsWith('API'))throw e}
     }
   }
-  clearTimeout(to);return out;
+  clearTimeout(to);
+  if(!out.trim()){localStorage.setItem('bauchtagebuch.lastraw',raw);throw new Error('Leere Antwort (stop_reason: '+(stop||'unbekannt')+'). Rohdaten:\n'+raw.slice(0,1500))}
+  return out;
 }
 const MEAL_PROMPT=`Du analysierst ein Foto einer Mahlzeit für ein Verdauungs-Tagebuch. Ziel ist, später Auslöser für Durchfall zu finden. Erfasse deshalb möglichst konkrete Einzelkomponenten, nicht Gerichte. Achte besonders auf: Kaffeeart (Espresso/Filterkaffee/Cappuccino), Tassengröße, Milch ja/nein, Brotsorte (Toast/Vollkorn/Weißbrot), Aufstriche (Marmelade, Butter, Käse, Wurst), Rohkost, Obst, Süßstoffe, Alkohol, Getränkemengen. Schätze Mengen grob.
 Antworte NUR mit JSON in genau dieser Form:
@@ -366,7 +369,7 @@ DATEN:\n${JSON.stringify(data)}`;
     const stamp='Auswertung vom '+new Date().toLocaleString('de-DE')+' ('+entries.length+' Einträge)\n\n';
     $('analyseText').textContent=stamp+txt;$('analyseOut').classList.remove('hidden');
     localStorage.setItem('bauchtagebuch.analyse',stamp+txt);
-  }catch(err){alert(err.message||String(err))}
+  }catch(err){$('analyseOut').classList.remove('hidden');$('analyseText').textContent='FEHLER: '+(err.message||String(err));}
   clearInterval(tick);btn.disabled=false;btn.textContent='Auswerten';
 };
 (function(){const a=localStorage.getItem('bauchtagebuch.analyse');if(a){$('analyseText').textContent=a;$('analyseOut').classList.remove('hidden')}})();
