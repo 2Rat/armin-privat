@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v6</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v7</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -209,10 +209,17 @@ function renderEditor(){
   $('editUnsicher').textContent=draft.unsicher?('KI unsicher bei: '+draft.unsicher):'';
   $('editor').classList.remove('hidden');
 }
-$('addCompBtn').onclick=()=>{const v=$('addComp').value.trim();if(!v||!draft)return;const p=v.split('·');draft.komponenten.push({name:p[0].trim(),menge:(p[1]||'').trim(),kategorie:''});$('addComp').value='';renderEditor()};
+function addCompText(v){
+  v=(v||'').trim();if(!v||!draft)return;
+  v.split(/[,;]|\bund\b/).map(s=>s.trim()).filter(Boolean).forEach(s=>{const p=s.split('·');draft.komponenten.push({name:p[0].trim(),menge:(p[1]||'').trim(),kategorie:''})});
+  $('addComp').value='';renderEditor();
+}
+$('addCompBtn').onclick=()=>addCompText($('addComp').value);
 $('addComp').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('addCompBtn').click()}};
 $('saveMeal').onclick=()=>{
   if(!draft)return;
+  addCompText($('addComp').value);
+  if(!draft.komponenten.length&&!confirm('Keine Bestandteile eingetragen – trotzdem speichern?'))return;
   if($('mealTime').value)draft.zeit=new Date($('mealTime').value).toISOString();
   draft.hinweis=$('mealHint').value.trim();
   const i=entries.findIndex(x=>x.id===draft.id);
@@ -280,11 +287,15 @@ function readExifDate(buf){
 }
 
 // API
-async function callApi(model,content,maxTokens){
+async function callApi(model,content,maxTokens,timeoutMs){
   const key=localStorage.getItem(LSK);if(!key)throw new Error('Kein API-Key – unter ⚙︎ eintragen');
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,messages:[{role:'user',content}]})});
-  if(!r.ok){const t=await r.text();throw new Error('API '+r.status+': '+t.slice(0,300))}
-  const j=await r.json();return j.content.map(c=>c.text||'').join('');
+  const ac=new AbortController();const to=setTimeout(()=>ac.abort(),timeoutMs||60000);
+  let r;
+  try{r=await fetch('https://api.anthropic.com/v1/messages',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:maxTokens,messages:[{role:'user',content}]})})}
+  catch(e){clearTimeout(to);throw new Error(e.name==='AbortError'?'Zeitüberschreitung – keine Antwort von der API':'Netzwerkfehler: '+e.message)}
+  clearTimeout(to);
+  if(!r.ok){const t=await r.text();const err=new Error('API '+r.status+': '+t.slice(0,300));err.status=r.status;throw err}
+  const j=await r.json();return (j.content||[]).map(c=>c.text||'').join('');
 }
 const MEAL_PROMPT=`Du analysierst ein Foto einer Mahlzeit für ein Verdauungs-Tagebuch. Ziel ist, später Auslöser für Durchfall zu finden. Erfasse deshalb möglichst konkrete Einzelkomponenten, nicht Gerichte. Achte besonders auf: Kaffeeart (Espresso/Filterkaffee/Cappuccino), Tassengröße, Milch ja/nein, Brotsorte (Toast/Vollkorn/Weißbrot), Aufstriche (Marmelade, Butter, Käse, Wurst), Rohkost, Obst, Süßstoffe, Alkohol, Getränkemengen. Schätze Mengen grob.
 Antworte NUR mit JSON in genau dieser Form:
@@ -305,15 +316,26 @@ $('analyze').onclick=async()=>{
 
 // Analyse
 $('runAnalyse').onclick=async()=>{
-  const btn=$('runAnalyse');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Werte aus …';
+  const btn=$('runAnalyse');btn.disabled=true;
+  const t0=Date.now();const tick=setInterval(()=>{btn.innerHTML='<span class="spin"></span>Werte aus … '+Math.round((Date.now()-t0)/1000)+' s'},1000);btn.innerHTML='<span class="spin"></span>Werte aus …';
   try{
+    if(!entries.length)throw new Error('Noch keine Einträge');
     const data=entries.slice().sort((a,b)=>a.zeit.localeCompare(b.zeit)).map(e=>{const o={...e};delete o.thumb;delete o.id;o.zeit=new Date(e.zeit).toLocaleString('de-DE');return o});
     const prompt=`Hier sind Tagebuch-Einträge (Mahlzeiten mit Einzelkomponenten und Symptome; Bristol 6–7 = Durchfall, 1–2 = hart). Aufgabe: Finde Komponenten oder Muster (z. B. Kaffeeart/-größe, Milch, Brotsorte, Marmelade, Rohkost, Alkohol, Mahlzeitenabstand, Uhrzeit, Wochentag), die an Tagen mit Durchfall oder Schmerzen 2–12 Stunden vorher gehäuft auftreten – im Vergleich zu beschwerdefreien Tagen. Nenne auch Komponenten, die auffällig OFT vorkommen und trotzdem NICHT zu Beschwerden führen (Entlastung). Sei ehrlich über die Datenbasis (Anzahl Tage, Anzahl Beschwerdetage). Keine Diagnose, nur Muster und konkrete Testvorschläge (eine Änderung pro Woche). Antworte auf Deutsch, kompakt, als Fließtext mit kurzen Absätzen.\n\nDATEN:\n${JSON.stringify(data)}`;
-    const txt=await callApi($('modelAnalyse').value,[{type:'text',text:prompt}],2000);
-    $('analyseText').textContent=txt;$('analyseOut').classList.remove('hidden');
-  }catch(err){alert(err.message)}
-  btn.disabled=false;btn.textContent='Auswerten';
+    let model=$('modelAnalyse').value,txt;
+    try{txt=await callApi(model,[{type:'text',text:prompt}],2000,120000)}
+    catch(e){
+      const fb=localStorage.getItem(LSM)||'claude-haiku-4-5-20251001';
+      if(e.status===404&&model!==fb){model=fb;txt=await callApi(model,[{type:'text',text:prompt}],2000,120000);txt='(Modell '+$('modelAnalyse').value+' nicht verfügbar, Auswertung mit '+fb+')\n\n'+txt}
+      else throw e;
+    }
+    const stamp='Auswertung vom '+new Date().toLocaleString('de-DE')+' ('+entries.length+' Einträge)\n\n';
+    $('analyseText').textContent=stamp+txt;$('analyseOut').classList.remove('hidden');
+    localStorage.setItem('bauchtagebuch.analyse',stamp+txt);
+  }catch(err){alert(err.message||String(err))}
+  clearInterval(tick);btn.disabled=false;btn.textContent='Auswerten';
 };
+(function(){const a=localStorage.getItem('bauchtagebuch.analyse');if(a){$('analyseText').textContent=a;$('analyseOut').classList.remove('hidden')}})();
 
 // List
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
