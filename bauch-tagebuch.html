@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v15</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v16</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -339,8 +339,27 @@ async function callApiStream(model,content,maxTokens,onText,timeoutMs){
   if(!out.trim()){localStorage.setItem('bauchtagebuch.lastraw',raw);throw new Error('Leere Antwort (stop_reason: '+(stop||'unbekannt')+'). Rohdaten:\n'+raw.slice(0,1500))}
   return out;
 }
+function parseLooseJson(t){
+  if(!t)return null;
+  t=t.replace(/```(json)?/gi,'').replace(/[\u201c\u201d\u201e]/g,'"');
+  const a=t.indexOf('{');if(a<0)return null;t=t.slice(a);
+  const tryP=x=>{try{return JSON.parse(x)}catch(e){return null}};
+  const b=t.lastIndexOf('}');let r=b>=0?tryP(t.slice(0,b+1)):null;if(r)return r;
+  let x=(b>=0?t.slice(0,b+1):t).replace(/,\s*([}\]])/g,'$1').replace(/}\s*{/g,'},{').replace(/"\s*\n\s*"/g,'","');
+  r=tryP(x);if(r)return r;
+  // abgeschnitten: bis zur letzten vollständigen Komponente kürzen und schließen
+  const k=t.indexOf('"komponenten"');if(k<0)return null;
+  const last=t.lastIndexOf('}');if(last<k)return null;
+  for(let i=last;i>k;i=t.lastIndexOf('}',i-1)){
+    r=tryP(t.slice(0,i+1)+']}');if(r)return r;
+    r=tryP(t.slice(0,i+1).replace(/,\s*$/,'')+']}');if(r)return r;
+    if(i<0)break;
+  }
+  return null;
+}
 const MEAL_PROMPT=`Du analysierst ein Foto einer Mahlzeit für ein Verdauungs-Tagebuch. Ziel ist, später Auslöser für Durchfall zu finden. Erfasse deshalb möglichst konkrete Einzelkomponenten, nicht Gerichte. Achte besonders auf: Kaffeeart (Espresso/Filterkaffee/Cappuccino), Tassengröße, Milch ja/nein, Brotsorte (Toast/Vollkorn/Weißbrot), Aufstriche (Marmelade, Butter, Käse, Wurst), Rohkost, Obst, Süßstoffe, Alkohol, Getränkemengen. Schätze Mengen grob.
-Antworte NUR mit JSON in genau dieser Form:
+Erfasse nur, was tatsächlich gegessen oder getrunken wird (keine Verpackungen, Geräte, Kosmetik). Höchstens 15 Komponenten, kurze Namen, keine Anführungszeichen innerhalb von Texten.
+Antworte NUR mit JSON in genau dieser Form, ohne Codeblock:
 {"komponenten":[{"name":"Filterkaffee","menge":"große Tasse ca. 300 ml","kategorie":"Getränk"}],"kaffee":{"art":"Filterkaffee|Espresso|Cappuccino|kein","groesse":"klein|mittel|groß","milch":"ja|nein|unklar"},"unsicher":"kurz, was nicht erkennbar war"}`;
 $('analyze').onclick=async()=>{
   if(!currentImg)return;
@@ -348,8 +367,13 @@ $('analyze').onclick=async()=>{
   try{
     const hint=$('mealHint').value.trim();
     const content=[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:currentImg}},{type:'text',text:MEAL_PROMPT+(hint?`\nZusatzinfo vom Nutzer: ${hint}`:'')}];
-    const txt=await callApi(localStorage.getItem(LSM)||'claude-haiku-5-5',content,800);
-    const m=txt.match(/\{[\s\S]*\}/);const j=JSON.parse(m?m[0]:txt);
+    const mdl=localStorage.getItem(LSM)||'claude-haiku-5-5';
+    let txt=await callApi(mdl,content,2500);
+    let j=parseLooseJson(txt);
+    if(!j){btn.innerHTML='<span class="spin"></span>Zweiter Versuch …';
+      txt=await callApi(mdl,[...content,{type:'text',text:'WICHTIG: Antworte ausschließlich mit gültigem, vollständigem JSON. Höchstens 10 Komponenten.'}],2500);
+      j=parseLooseJson(txt);}
+    if(!j)throw new Error('Die KI-Antwort war nicht lesbar. Bitte nochmal „Auslesen" oder Bestandteile per Hand eintragen.');
     draft={id:uid(),typ:'mahlzeit',zeit:new Date($('mealTime').value).toISOString(),komponenten:j.komponenten||[],kaffee:j.kaffee||null,unsicher:j.unsicher||'',hinweis:hint,thumb:currentThumb};
     renderEditor();
   }catch(err){alert(err.message)}
