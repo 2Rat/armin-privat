@@ -48,7 +48,7 @@ pre{white-space:pre-wrap;font:14px/1.4 inherit;margin:0}
 </style>
 </head>
 <body>
-<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v16</span></h1><button id="btnSettings">⚙︎</button></header>
+<header><h1>Bauch-Tagebuch <span style="font-size:11px;opacity:.6;font-weight:400">v17</span></h1><button id="btnSettings">⚙︎</button></header>
 <main>
 
 <section id="viewSettings" class="card hidden">
@@ -348,6 +348,7 @@ function parseLooseJson(t){
   let x=(b>=0?t.slice(0,b+1):t).replace(/,\s*([}\]])/g,'$1').replace(/}\s*{/g,'},{').replace(/"\s*\n\s*"/g,'","');
   r=tryP(x);if(r)return r;
   // abgeschnitten: bis zur letzten vollständigen Komponente kürzen und schließen
+  t=t.replace(/}\s*{/g,'},{').replace(/,\s*([}\]])/g,'$1');
   const k=t.indexOf('"komponenten"');if(k<0)return null;
   const last=t.lastIndexOf('}');if(last<k)return null;
   for(let i=last;i>k;i=t.lastIndexOf('}',i-1)){
